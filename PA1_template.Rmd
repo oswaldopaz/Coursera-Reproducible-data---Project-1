@@ -1,0 +1,169 @@
+
+# "Coursera "Reproducible Research", week 2, project 1"  
+author: "OPaz"  
+date: "7/4/2020"  
+output: html_document  
+
+## R Markdown Project (Coursera)
+
+This is an R Markdown document produced to fulfill project 1 of the Coursera's "Reproducible Research" project corresponding to week 2. I will be listing the requiered activities and its proposed answers. I will be working with a data set that comprises data collected from activity movement monitoring devices, particularly three variables:  
+
+steps: Number of steps taking in a 5-minute interval (missing values are coded as NA).  
+date: The date on which the measurement was taken in YYYY-MM-DD format.  
+interval: Identifier for the 5-minute interval in which measurement was taken.  
+```{r initial pkg load, echo=FALSE, results= "hide"}
+library(dplyr)
+library(ggplot2)
+library(knitr)
+```
+
+### First Step: Collecting and manipulating data & plotting total steps.  
+
+- Loading and transforming data:  
+
+
+```{r initial, echo=TRUE}
+activity <- read.csv("activity.csv")
+activity$date <- as.Date(as.character(activity$date))
+head(activity,15)
+```
+- Plotting a histogram for total steps, NAs are not considered in this part:  
+```{r plot 1, echo=TRUE}
+
+act <- activity %>% group_by(date)%>% summarise(steps=sum(steps))
+hist(act$steps, 
+     main="Histogram of number of steps per day, NAs ignored",
+     xlab = "Step ranges (5,000 bins)", col = 5, ylim = c(0,30))
+```
+
+As you can see from the plot, the bulk of steps seem to fall between 10,000 - 15,000, As pero instructed, NAs were ignored in this study.  
+
+- Calculating the mean and median of the total number of steps taken per day:
+
+```{r calculation 1, echo=TRUE}
+mean(act$steps, na.rm = T)
+median(act$steps, na.rm = T)
+``` 
+ 
+ **It is noticeable that the mean and means are quite close, which is consistent with the "normal" distribution shown in the plot above. Again NAS ignored here.**   
+
+## Step 2: Making a time series plot  of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis):  
+
+```{r plot 2, time series, echo=TRUE}
+series_plot <- aggregate(steps ~ interval, activity, mean)
+
+g <- ggplot(series_plot,aes(interval, steps))+
+      geom_line(size=1, color= "red")
+g + ggtitle("Time series, intervals Vs mean steps, NAs ignored")
+``` 
+
+
+### Step 2.2 Determining the 5-minute interval which, on average across all the days in the dataset, contains the maximum number of steps:
+
+```{r plot 3, time series, echo=TRUE}
+Max <- max(series_plot$steps)
+series_plot[series_plot$steps==Max,1]
+g + geom_segment(aes(x=835,y=-15,xend=835,yend=Max))+
+      scale_x_continuous(limits = c(0, 2500), breaks = 835,
+            name = "Interval with maximun steps mean")+
+    theme_minimal()
+
+``` 
+
+**The interval was calculated to be 835, which yields a little above 200 steps, on average. It follows that, interval 835 was the main steps contributor among all 61 days in the study.**
+
+## Step 3: Imputting missing values:  
+
+- I'll start by determining the NAs per column:
+```{r calculating missing values, echo=TRUE}
+colSums(is.na(activity))
+``` 
+
+- Now I'll calculate the means per day to be imputted into final DF:
+```{r calculating mean values, echo=TRUE}
+actNotNa <- activity[!is.na(activity$steps),]
+act4 <- actNotNa %>% group_by(interval) %>% summarize(Mean=mean(steps, na.rm = T))
+``` 
+
+- The next code will serve for data handling to impute mean values instead of NAs per day (split+merge+arrange):
+
+```{r manipulating to impute values, echo=TRUE}
+actNA <- activity[is.na(activity$steps),]
+
+mrg <- merge(actNA,act4, by.y="interval")
+
+mrg$steps <-mrg$Mean
+mrg <- mrg[-4]
+mrg <- mrg[c(2,3,1)]
+
+act_imp <- rbind(actNotNa,mrg)
+act_imp <- arrange(act_imp,date)
+``` 
+
+Now our imputed data frame is "act_imp", first rows follow:
+```{r showing imputed df, echo=TRUE}
+head(act_imp,15)
+``` 
+
+### Step 3.2 Mean and median number of steps taken each day (NAs now imputed):
+
+```{r new mean and median df, echo=TRUE}
+act5 <- act_imp %>% group_by(date)%>% summarise(steps=sum(steps))
+mean(act5$steps)
+median(act5$steps)
+``` 
+
+**As expected, they are equal now, after imputing the means in all data**
+
+### Step 3.3 Plotting again with NAs now imputed into activity:
+
+```{r plot4, echo=TRUE}
+act2 <- act_imp %>% group_by(date)%>% summarise(steps=sum(steps))
+hist(act2$steps, 
+     main="Histogram of number of steps per day, NAs imputed",
+     xlab = "Step ranges (5,000 bins)", col = 5, ylim = c(0,35))
+``` 
+
+**The graph now shows more volume but same shape, as expected, now with more data**
+
+## Step 4: Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.  
+
+The following code will accomplish the task, using a loop, if-else operation, and basic R data manipulation:
+```{r for weekends, echo=TRUE}
+act_imp$date <- as.Date(act_imp$date)
+
+i <- as.numeric()
+for (i in 1:nrow(act_imp)){
+  if (weekdays(act_imp$date[i])== "Saturday")
+  {act_imp$day_type[i]<- "weekend"} else 
+    if (weekdays(act_imp$date[i])== "Sunday"){
+      act_imp$day_type[i]<- "weekend"
+    }
+  else{
+    act_imp$day_type[i]<-"weekday" 
+  }
+}
+``` 
+
+A sample of our new "act_imp" follows, as well as a table of weekdays and weekends:
+```{r new act_imp with weekends, echo=TRUE}
+head(act_imp,15)
+table(act_imp$day_type)
+``` 
+
+### Step 2.2 Make a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis).
+
+The following code, using ggplot2, will show the desired graphs:
+
+```{r plot5, echo=TRUE}
+activity7 <- act_imp %>%
+              group_by(day_type,interval) %>%
+             summarize(steps=mean(steps))
+
+ggplot(activity7,aes(interval, steps))+
+  geom_line(size=1, color= "purple")+
+  facet_wrap(~day_type, nrow=2)+
+  ggtitle("Comparison of steps means between weekdays and weekends, NAs imputed")
+``` 
+
+**Looks like, in general, our participants started to walk later on weekends and more evenly, compared to weekdays. But that what weekends are for, right? ;)**
